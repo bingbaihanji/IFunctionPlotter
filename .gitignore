@@ -1,0 +1,23 @@
+# Build outputs
+/build/
+/cmake-build-*/
+/out/
+/install/
+
+# IDE
+/.idea/
+/.vs/
+/.vscode/
+*.user
+*.suo
+*.vcxproj.user
+
+# Claude Code local settings
+/.claude/
+
+# CMake
+CMakeUserPresets.json
+
+# Runtime state
+imgui.ini
+implot.ini
