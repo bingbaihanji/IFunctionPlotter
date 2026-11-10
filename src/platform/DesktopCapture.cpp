@@ -108,6 +108,7 @@ void DesktopCapture::Shutdown() {
     width_ = 0;
     height_ = 0;
     active_ = false;
+    hasSnapshot_ = false;
 }
 
 bool DesktopCapture::CreateSnapshot(DXGI_FORMAT format, UINT width,
@@ -149,9 +150,35 @@ bool DesktopCapture::Update() {
     Microsoft::WRL::ComPtr<ID3D11Texture2D> desktopTexture;
     if (SUCCEEDED(resource.As(&desktopTexture))) {
         context_->CopyResource(snapshot_.Get(), desktopTexture.Get());
+        hasSnapshot_ = true;
     }
     duplication_->ReleaseFrame();
     return true;
+}
+
+bool DesktopCapture::CaptureFrame(UINT timeoutMilliseconds) {
+    if (!Active()) {
+        return false;
+    }
+
+    DXGI_OUTDUPL_FRAME_INFO frameInfo{};
+    Microsoft::WRL::ComPtr<IDXGIResource> resource;
+    const HRESULT result = duplication_->AcquireNextFrame(
+        timeoutMilliseconds, &frameInfo, resource.GetAddressOf());
+    if (FAILED(result)) {
+        if (result != DXGI_ERROR_WAIT_TIMEOUT) {
+            active_ = false;
+        }
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> desktopTexture;
+    if (SUCCEEDED(resource.As(&desktopTexture))) {
+        context_->CopyResource(snapshot_.Get(), desktopTexture.Get());
+        hasSnapshot_ = true;
+    }
+    duplication_->ReleaseFrame();
+    return hasSnapshot_;
 }
 
 } // namespace platform

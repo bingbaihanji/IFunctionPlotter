@@ -21,10 +21,15 @@ public:
     // change) is not a failure: the previous snapshot stays valid.
     bool Update();
 
+    // Waits up to timeoutMilliseconds for one fresh desktop frame. Used by the
+    // recording-compatible mode to grab a single static snapshot.
+    bool CaptureFrame(UINT timeoutMilliseconds);
+
     bool Active() const {
         return active_ && duplication_ != nullptr && snapshotSrv_ != nullptr;
     }
 
+    bool HasSnapshot() const { return hasSnapshot_; }
     ID3D11ShaderResourceView* Snapshot() const { return snapshotSrv_.Get(); }
     UINT Width() const { return width_; }
     UINT Height() const { return height_; }
@@ -45,6 +50,7 @@ private:
     UINT width_ = 0;
     UINT height_ = 0;
     bool active_ = false;
+    bool hasSnapshot_ = false;
 };
 
 } // namespace platform

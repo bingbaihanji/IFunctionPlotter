@@ -17,6 +17,7 @@ struct UiState {
     AppearanceSettings appearance;
     std::string desktopStatus = "桌面采样未开启";
     bool desktopCaptureActive = false;
+    bool refreshDesktopSnapshot = false;
 };
 
 void DrawMainUi(app::PlotterApp& app, const WindowActions& windowActions,

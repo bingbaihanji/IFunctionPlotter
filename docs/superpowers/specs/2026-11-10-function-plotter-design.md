@@ -92,8 +92,9 @@ primary := number | identifier | '(' expr ')' | func '(' args ')'
 6. 窗口：无边框 WS_POPUP，自定义标题栏（拖动/最小化/最大化/关闭），WM_NCHITTEST 支持边缘缩放；Win11 DWM 圆角/暗色。
 7. 背景渐变：`#005a4b → #01738a`，叠加低强度青绿/青色光斑、细网格、扫描光与噪点；可在设置中关闭为深色纯色。
 8. 桌面背景采样：使用 DXGI Desktop Duplication 获取窗口所在显示器的桌面快照，`WDA_EXCLUDEFROMCAPTURE` 排除本窗口，避免镜像反馈；着色器按窗口位置采样快照，面板浸染降为无色。
-9. 桌面采样开启后本窗口不参与屏幕捕获；关闭采样时恢复 `WDA_NONE`。
-10. 窗口拖动与边缘缩放不走 Windows 原生模态循环：标题栏拖动按帧轮询 `GetCursorPos` 并 `SetWindowPos`，边缘缩放拦截 `WM_NCLBUTTONDOWN` 后逐帧计算新矩形。主循环持续运行，因此拖动/缩放期间玻璃仍每帧采样桌面并重新渲染。
+9. 实时模式窗口不参与屏幕捕获；关闭采样时恢复 `WDA_NONE`。
+10. 录屏兼容模式：窗口保持可被截图/录屏，玻璃使用一张静态桌面快照。开启或“刷新背景”时临时设置 `WDA_EXCLUDEFROMCAPTURE`，通过 `DwmFlush` + Desktop Duplication 抓取一帧后立即恢复 `WDA_NONE`；之后不再逐帧更新，窗口拖动/缩放仍按帧重新采样该快照。
+11. 窗口拖动与边缘缩放不走 Windows 原生模态循环：标题栏拖动按帧轮询 `GetCursorPos` 并 `SetWindowPos`，边缘缩放拦截 `WM_NCLBUTTONDOWN` 后逐帧计算新矩形。主循环持续运行，因此拖动/缩放期间玻璃仍每帧采样桌面并重新渲染。
 
 ## 7. 构建与验证
 

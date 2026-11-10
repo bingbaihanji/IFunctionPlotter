@@ -273,9 +273,25 @@ void DrawSettingsPopup(UiState& state, const Fonts& fonts,
     DrawToggleRow("桌面背景采样", "##desktop_backdrop",
                   &state.appearance.desktopBackdrop);
     ImGui::TextWrapped(
-        "无色液体玻璃：实时采样窗口后方的桌面，"
-        "并应用高斯模糊、边缘折射与色散。"
-        "开启后本窗口不会被截图工具捕获。");
+        "无色液体玻璃：采样窗口后方的桌面，"
+        "并应用高斯模糊、边缘折射与色散。");
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+
+    DrawToggleRow("录屏兼容模式", "##recording_compatible",
+                  &state.appearance.recordingCompatible);
+    ImGui::TextWrapped(
+        "使用静态桌面快照作为玻璃背景，窗口可正常截图/录屏。"
+        "实时模式会排除本窗口，因此无法被录屏捕获。");
+
+    if (state.appearance.desktopBackdrop &&
+        state.appearance.recordingCompatible) {
+        if (ImGui::Button("刷新背景", ImVec2(-1.0f, 34.0f))) {
+            state.refreshDesktopSnapshot = true;
+        }
+        ImGui::TextDisabled(
+            "刷新时窗口会短暂从录屏中消失（用于排除自身）。");
+    }
+
     const ImVec4 statusColor =
         state.desktopCaptureActive
             ? ImVec4(0.35f, 0.95f, 0.75f, 1.0f)

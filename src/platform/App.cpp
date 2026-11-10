@@ -111,7 +111,7 @@ int App::Run(HINSTANCE instance) {
 
         render::GlassRenderOptions renderOptions;
         renderOptions.gradientEnabled = uiState_.appearance.gradientEnabled;
-        if (desktopCapture_.Active() &&
+        if (desktopCapture_.HasSnapshot() &&
             desktopCapture_.Snapshot() != nullptr) {
             POINT clientOrigin{0, 0};
             ClientToScreen(hwnd_, &clientOrigin);
@@ -394,52 +394,12 @@ void App::ApplyStyle() {
 
 void App::UpdateDesktopCapture() {
     const bool requested = uiState_.appearance.desktopBackdrop;
+    const bool recordingCompatible =
+        uiState_.appearance.recordingCompatible;
+    const bool refreshRequested = uiState_.refreshDesktopSnapshot;
+    uiState_.refreshDesktopSnapshot = false;
 
-    if (requested) {
-        if (!desktopCapture_.Active()) {
-            if (!displayAffinitySet_) {
-                if (SetWindowDisplayAffinity(hwnd_, kExcludeFromCapture) ==
-                    FALSE) {
-                    uiState_.appearance.desktopBackdrop = false;
-                    uiState_.desktopCaptureActive = false;
-                    uiState_.desktopStatus =
-                        "当前系统不支持窗口捕获排除，桌面采样不可用";
-                    return;
-                }
-                displayAffinitySet_ = true;
-            }
-
-            if (!desktopCapture_.Initialize(device_.Get(), context_.Get(),
-                                            hwnd_)) {
-                desktopCapture_.Shutdown();
-                SetWindowDisplayAffinity(hwnd_, kAffinityNone);
-                displayAffinitySet_ = false;
-                uiState_.appearance.desktopBackdrop = false;
-                uiState_.desktopCaptureActive = false;
-                uiState_.desktopStatus =
-                    "桌面采样初始化失败（可能被远程桌面或显卡占用）";
-                return;
-            }
-            uiState_.desktopStatus = "桌面采样已开启";
-        }
-
-        const HMONITOR currentMonitor =
-            MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY);
-        if (desktopCapture_.Monitor() != currentMonitor) {
-            desktopCapture_.Shutdown();
-            SetWindowDisplayAffinity(hwnd_, kAffinityNone);
-            displayAffinitySet_ = false;
-            uiState_.desktopCaptureActive = false;
-            uiState_.desktopStatus = "窗口已切换显示器，正在重新初始化…";
-            return;
-        }
-
-        desktopCapture_.Update();
-        uiState_.desktopCaptureActive = desktopCapture_.Active();
-        if (!desktopCapture_.Active()) {
-            uiState_.desktopStatus = "桌面采样中断，正在重试…";
-        }
-    } else {
+    if (!requested) {
         if (desktopCapture_.Active() ||
             desktopCapture_.Monitor() != nullptr) {
             desktopCapture_.Shutdown();
@@ -450,7 +410,115 @@ void App::UpdateDesktopCapture() {
         }
         uiState_.desktopCaptureActive = false;
         uiState_.desktopStatus = "桌面采样未开启";
+        return;
     }
+
+    if (!desktopCapture_.Active()) {
+        if (!desktopCapture_.Initialize(device_.Get(), context_.Get(),
+                                        hwnd_)) {
+            if (displayAffinitySet_) {
+                SetWindowDisplayAffinity(hwnd_, kAffinityNone);
+                displayAffinitySet_ = false;
+            }
+            uiState_.appearance.desktopBackdrop = false;
+            uiState_.desktopCaptureActive = false;
+            uiState_.desktopStatus =
+                "桌面采样初始化失败（可能被远程桌面或显卡占用）";
+            return;
+        }
+    }
+
+    const HMONITOR currentMonitor =
+        MonitorFromWindow(hwnd_, MONITOR_DEFAULTTOPRIMARY);
+    if (desktopCapture_.Monitor() != currentMonitor) {
+        desktopCapture_.Shutdown();
+        if (displayAffinitySet_) {
+            SetWindowDisplayAffinity(hwnd_, kAffinityNone);
+            displayAffinitySet_ = false;
+        }
+        uiState_.desktopCaptureActive = false;
+        uiState_.desktopStatus = "窗口已切换显示器，正在重新初始化…";
+        return;
+    }
+
+    if (recordingCompatible) {
+        // Recording-friendly mode: the window stays capturable. The glass
+        // uses one desktop snapshot captured with a temporary capture
+        // exclusion, and the snapshot is refreshed on demand.
+        if (displayAffinitySet_) {
+            SetWindowDisplayAffinity(hwnd_, kAffinityNone);
+            displayAffinitySet_ = false;
+        }
+
+        if (refreshRequested || !desktopCapture_.HasSnapshot()) {
+            uiState_.desktopStatus = "正在抓取静态桌面快照…";
+            const bool captured = CaptureStaticDesktopSnapshot();
+            if (captured) {
+                uiState_.desktopStatus =
+                    "桌面采样已开启（静态快照，可录屏）";
+            } else {
+                uiState_.desktopStatus =
+                    desktopCapture_.HasSnapshot()
+                        ? "静态快照刷新失败，继续使用上一张快照"
+                        : "静态快照获取失败，可点击“刷新背景”重试";
+            }
+        } else {
+            uiState_.desktopStatus =
+                "桌面采样已开启（静态快照，可录屏）";
+        }
+        uiState_.desktopCaptureActive = desktopCapture_.HasSnapshot();
+    } else {
+        // Live mode: the window is excluded from capture so the desktop
+        // duplication sees what is really behind it.
+        if (!displayAffinitySet_) {
+            if (SetWindowDisplayAffinity(hwnd_, kExcludeFromCapture) ==
+                FALSE) {
+                uiState_.appearance.desktopBackdrop = false;
+                uiState_.desktopCaptureActive = false;
+                uiState_.desktopStatus =
+                    "当前系统不支持窗口捕获排除，实时桌面采样不可用";
+                return;
+            }
+            displayAffinitySet_ = true;
+        }
+
+        desktopCapture_.Update();
+        uiState_.desktopCaptureActive = desktopCapture_.HasSnapshot();
+        uiState_.desktopStatus = desktopCapture_.Active()
+                                    ? "桌面采样已开启（实时，窗口不可录屏）"
+                                    : "桌面采样中断，正在重试…";
+    }
+}
+
+bool App::CaptureStaticDesktopSnapshot() {
+    if (!desktopCapture_.Active()) {
+        return false;
+    }
+
+    if (!displayAffinitySet_) {
+        if (SetWindowDisplayAffinity(hwnd_, kExcludeFromCapture) == FALSE) {
+            return false;
+        }
+        displayAffinitySet_ = true;
+    }
+
+    DwmFlush();
+
+    bool captured = false;
+    for (int attempt = 0; attempt < 10; ++attempt) {
+        if (desktopCapture_.CaptureFrame(60)) {
+            captured = true;
+            break;
+        }
+        Sleep(15);
+    }
+
+    if (displayAffinitySet_) {
+        SetWindowDisplayAffinity(hwnd_, kAffinityNone);
+        displayAffinitySet_ = false;
+    }
+    DwmFlush();
+    return captured;
 }
 
 void App::Shutdown() {

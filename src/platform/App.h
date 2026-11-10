@@ -30,6 +30,7 @@ private:
     void ResizeSwapChain(UINT width, UINT height);
     void CreateRenderTarget();
     void UpdateDesktopCapture();
+    bool CaptureStaticDesktopSnapshot();
     void UpdateWindowDrag();
     void UpdateWindowResize();
     bool BeginResize(WPARAM hitTest);
